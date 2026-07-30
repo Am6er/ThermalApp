@@ -178,25 +178,6 @@
             <Setter Property="Margin" Value="0,2"/>
         </Style>
 
-        <!-- Подсказки: тёмные, с переносом строк, достаточно широкие для пары предложений -->
-        <Style TargetType="ToolTip">
-            <Setter Property="MaxWidth" Value="360"/>
-            <Setter Property="HasDropShadow" Value="True"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ToolTip">
-                        <Border Background="#FF2A2A34" BorderBrush="#FF55555F" BorderThickness="1"
-                                CornerRadius="4" Padding="10,7" SnapsToDevicePixels="True">
-                            <!-- TextBlock вместо ContentPresenter: только так надёжно работает перенос строк.
-                                 Все подсказки в приложении — обычные строки. -->
-                            <TextBlock Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
-                                       TextWrapping="Wrap" Foreground="#FFECECF2"
-                                       FontSize="12" LineHeight="17" MaxWidth="336"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
 
         <!-- Секция панели: как GroupBox, но сворачивается кликом по заголовку -->
         <Style x:Key="Section" TargetType="Expander">

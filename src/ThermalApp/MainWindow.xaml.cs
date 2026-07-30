@@ -11,6 +11,7 @@ using ThermalApp.Core;
 using ThermalApp.Device;
 using ThermalApp.Recording;
 using ThermalApp.Settings;
+using ThermalApp.Ui;
 
 namespace ThermalApp;
 
@@ -94,6 +95,12 @@ public partial class MainWindow : Window
             sec.Collapsed += Section_StateChanged;
         }
 
+        // подсказки: показываем описание элемента под курсором в строке внизу.
+        // handledEventsToo = true, иначе события не дойдут из-за контролов,
+        // которые помечают MouseMove как обработанное.
+        AddHandler(MouseMoveEvent, new MouseEventHandler(Window_MouseMoveForHint), true);
+        MouseLeave += (_, _) => ResetHint();
+
         Loaded += OnLoadedFirstTime;
         Closing += (_, _) => SaveSettingsNow();
         Closed += (_, _) => { _capture.Dispose(); _recorder.Dispose(); _camera.Dispose(); _timer.Stop(); _saveTimer.Stop(); };
@@ -107,6 +114,27 @@ public partial class MainWindow : Window
         if (_settings.LastError is { } err) SetStatus(err);
         if (AutoStartCheck.IsChecked == true) StartCapture(silentIfMissing: true);
     }
+
+    // ---------------- подсказки в строке внизу ----------------
+
+    private const string DefaultHint = "Наведите курсор на любой элемент — здесь появится его описание.";
+
+    private void Window_MouseMoveForHint(object sender, MouseEventArgs e)
+    {
+        var pos = e.GetPosition(this);
+
+        // VisualTreeHelper.HitTest, а не e.OriginalSource: так подсказки работают
+        // и для выключенных элементов (например, панели камеры до подключения).
+        DependencyObject? hit = null;
+        VisualTreeHelper.HitTest(this, null,
+            r => { hit = r.VisualHit; return HitTestResultBehavior.Stop; },
+            new PointHitTestParameters(pos));
+
+        string text = Hint.Find(hit ?? e.OriginalSource as DependencyObject) ?? DefaultHint;
+        if (!ReferenceEquals(HintText.Text, text) && HintText.Text != text) HintText.Text = text;
+    }
+
+    private void ResetHint() => HintText.Text = DefaultHint;
 
     // ---------------- настройки ----------------
 

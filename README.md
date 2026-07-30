@@ -1,6 +1,9 @@
+<img src="docs/icon.png" width="96" align="right" alt="">
+
 # ThermalApp
 
 [![build](https://github.com/Am6er/ThermalApp/actions/workflows/build.yml/badge.svg)](https://github.com/Am6er/ThermalApp/actions/workflows/build.yml)
+[![release](https://img.shields.io/github/v/release/Am6er/ThermalApp?include_prereleases&label=%D1%81%D0%B1%D0%BE%D1%80%D0%BA%D0%B0)](https://github.com/Am6er/ThermalApp/releases)
 
 Приложение для Windows под USB-тепловизор **Mileseey TR256i** (256×192,
 `USB\VID_0BDA&PID_5840`). Живое тепловое видео, температура в любой точке кадра,
@@ -82,6 +85,15 @@ InfiRay P2 Pro, Topdon TC001, HTI HT-203U, Victor 328B. Протокол дав�
 температура атмосферы (K), излучательная способность (1/127), пропускание
 (1/127), выбор усиления (0 = low gain / широкий диапазон, 1 = high gain).
 
+## Скачать
+
+Готовая сборка лежит в [Releases](https://github.com/Am6er/ThermalApp/releases):
+предрелиз **latest** пересобирается автоматически при каждом коммите в `main`,
+а теги `vX.Y.Z` дают обычные версионные релизы.
+
+Нужен только [.NET 9 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)
+— сборка не self-contained.
+
 ## Сборка и запуск
 
 Нужен .NET 9 SDK.
@@ -92,9 +104,6 @@ cd ThermalApp
 dotnet build -c Release
 .\src\ThermalApp\bin\x64\Release\net9.0-windows\ThermalApp.exe
 ```
-
-Готовую сборку можно взять из артефактов
-[GitHub Actions](https://github.com/Am6er/ThermalApp/actions/workflows/build.yml).
 
 Приём кадров и все измерения работают сразу, без дополнительной настройки.
 
@@ -188,12 +197,18 @@ src/ThermalApp/
   Recording/RadiometryFile.cs формат .r16 + экспорт CSV
   Recording/Recorder.cs       запись .mp4 + параллельно .r16
   Settings/AppSettings.cs     settings.json рядом с exe
+  Ui/Hint.cs                  описания элементов в строке внизу окна
   MainWindow.xaml(.cs)        интерфейс
   App.xaml                    тёмная тема, свои шаблоны контролов
 
 src/ThermalApp.Probe/         консольная диагностика
 tools/get-libusb.ps1          скачивание libusb-1.0.dll
+tools/make-icon.ps1           генератор appicon.ico и docs/icon.png
 ```
+
+Подсказок-тултипов нет: описание элемента под курсором показывается в строке
+внизу окна — не перекрывает интерфейс и не исчезает по таймеру. Текст задаётся
+в XAML через `ui:Hint.Text`.
 
 ## Что ещё не сделано
 

@@ -13,7 +13,13 @@
     <AssemblyName>ThermalApp</AssemblyName>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <Version>1.0.0</Version>
+    <ApplicationIcon>appicon.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- та же иконка используется как Window.Icon -->
+    <Resource Include="appicon.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="LibUsbDotNet" Version="3.0.224" />
