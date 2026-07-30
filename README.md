@@ -203,7 +203,6 @@ src/ThermalApp/
 
 src/ThermalApp.Probe/         консольная диагностика
 tools/get-libusb.ps1          скачивание libusb-1.0.dll
-tools/make-icon.ps1           генератор appicon.ico и docs/icon.png
 ```
 
 Подсказок-тултипов нет: описание элемента под курсором показывается в строке
