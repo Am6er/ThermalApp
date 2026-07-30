@@ -1,0 +1,316 @@
+<Window x:Class="ThermalApp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+        Title="ThermalApp — Mileseey TR256i" Height="720" Width="1180"
+        Background="#FF14141A" WindowStartupLocation="CenterScreen"
+        ToolTipService.InitialShowDelay="350" ToolTipService.ShowDuration="5000"
+        ToolTipService.BetweenShowDelay="150">
+
+    <Window.Resources>
+        <!-- подсказки, общие для подписи и поля -->
+        <sys:String x:Key="TtMinC">Нижняя граница палитры в °C (режим «Вручную»). Всё, что холоднее, закрашивается крайним цветом палитры.</sys:String>
+        <sys:String x:Key="TtMaxC">Верхняя граница палитры в °C (режим «Вручную»). Всё, что горячее, закрашивается крайним цветом палитры.</sys:String>
+        <sys:String x:Key="TtEms">Коэффициент излучения поверхности (эмиссивность), 0,01–1,00. Матовая краска, дерево, кожа, пластик ≈ 0,95; окисленный металл 0,6–0,8; блестящий металл 0,1–0,3. Ошибка в этом параметре напрямую искажает измеренную температуру.</sys:String>
+        <sys:String x:Key="TtDist">Расстояние до объекта в метрах. Камера учитывает его при поправке на поглощение излучения воздухом.</sys:String>
+        <sys:String x:Key="TtRefl">Температура окружения, которое отражается от объекта, °C. Обычно это температура помещения. Важна для блестящих поверхностей с низкой эмиссивностью.</sys:String>
+        <sys:String x:Key="TtAtm">Температура воздуха между камерой и объектом, °C. Заметно влияет только на больших дистанциях.</sys:String>
+        <sys:String x:Key="TtRawCmd">Код команды в hex. Например 8409 — палитра камеры, 8514 — радиометрические параметры, 8405 — сведения об устройстве. Для записи к коду добавляется 0x4000.</sys:String>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="86"/>
+            <ColumnDefinition Width="340"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Видео -->
+        <Grid Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Border x:Name="ViewHost" Background="#FF0B0B0F" SizeChanged="ViewHost_SizeChanged" ClipToBounds="True">
+                <Grid x:Name="ViewArea" HorizontalAlignment="Center" VerticalAlignment="Center"
+                      Width="512" Height="384" Background="Black"
+                      MouseMove="ViewArea_MouseMove" MouseLeave="ViewArea_MouseLeave"
+                      MouseLeftButtonDown="ViewArea_MouseLeftButtonDown"
+                      ToolTip="Живая тепловая картинка 256×192. Наведите мышь — температура в точке появится в строке состояния и рядом с курсором. Клик закрепляет точку, повторный клик рядом с ней — убирает.">
+                    <Image x:Name="Video" Stretch="Fill"/>
+                    <Canvas x:Name="Overlay" IsHitTestVisible="False"/>
+                </Grid>
+            </Border>
+
+            <StatusBar Grid.Row="1" Background="#FF1E1E24">
+                <StatusBarItem>
+                    <TextBlock x:Name="StatusText" Text="Готово"
+                               ToolTip="Последнее событие: запуск потока, сохранение файла, ошибка."/>
+                </StatusBarItem>
+                <Separator/>
+                <StatusBarItem>
+                    <TextBlock x:Name="FpsText" Text="—"
+                               ToolTip="Реально измеренная частота кадров и номер устройства захвата."/>
+                </StatusBarItem>
+                <Separator/>
+                <StatusBarItem>
+                    <TextBlock x:Name="TempText" Text="—"
+                               ToolTip="min / max / центр текущего кадра и температура под курсором, °C."/>
+                </StatusBarItem>
+            </StatusBar>
+        </Grid>
+
+        <!-- Шкала температур -->
+        <Grid Grid.Column="1" Margin="6,10,6,30"
+              ToolTip="Шкала палитры для текущего кадра: сверху верхняя граница диапазона, снизу нижняя. Границы зависят от выбранного режима диапазона.">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <TextBlock x:Name="ScaleHiText" Text="—" HorizontalAlignment="Center" FontSize="11"/>
+            <Rectangle x:Name="ScaleBar" Grid.Row="1" Width="26" HorizontalAlignment="Center" Margin="0,4"
+                       Stroke="#FF3A3A44"/>
+            <TextBlock x:Name="ScaleLoText" Grid.Row="2" Text="—" HorizontalAlignment="Center" FontSize="11"/>
+        </Grid>
+
+        <!-- Панель управления. Каждая секция сворачивается кликом по заголовку. -->
+        <ScrollViewer Grid.Column="2" Background="{StaticResource PanelBg}" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="2,6,2,10">
+
+                <Expander x:Name="SecDevice" Style="{StaticResource Section}" Header="Устройство"
+                          ToolTip="Выбор камеры и управление видеопотоком. Клик по заголовку сворачивает секцию.">
+                    <StackPanel>
+                        <ComboBox x:Name="DeviceCombo" Margin="0,2,0,4"
+                                  SelectionChanged="DeviceCombo_SelectionChanged"
+                                  ToolTip="Устройство захвата. Тепловизор узнаётся по характерному кадру 256×384 при 25 fps: верхняя половина — картинка, нижняя — сырые температуры. Выбор запоминается в settings.json."/>
+                        <CheckBox x:Name="AutoStartCheck" Content="Автозапуск камеры при старте приложения"
+                                  Checked="AutoStart_Changed" Unchecked="AutoStart_Changed"
+                                  ToolTip="Открывать видеопоток сразу при запуске приложения, не нажимая «Старт»."/>
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="Обновить" Margin="0,3,3,3" Click="Refresh_Click"
+                                    ToolTip="Перечитать список устройств захвата. Нужно, если камеру подключили уже после запуска приложения."/>
+                            <Button Grid.Column="1" x:Name="StartBtn" Content="Старт" Margin="0,3,3,3" Click="Start_Click"
+                                    ToolTip="Открыть видеопоток. Первые 1–2 секунды модуль отдаёт пустые кадры — это нормально, идёт его инициализация."/>
+                            <Button Grid.Column="2" x:Name="StopBtn" Content="Стоп" Margin="0,3" Click="Stop_Click" IsEnabled="False"
+                                    ToolTip="Закрыть видеопоток и освободить камеру для других программ."/>
+                        </Grid>
+                    </StackPanel>
+                </Expander>
+
+                <Expander x:Name="SecImage" Style="{StaticResource Section}" Header="Изображение"
+                          ToolTip="Как сырые данные превращаются в картинку: палитра, ориентация, диапазон температур.">
+                    <StackPanel>
+                        <TextBlock Text="Палитра"
+                                   ToolTip="Цветовая схема, которой раскрашиваются температуры. Считается у нас из сырых 16-битных данных, а не берётся из камеры — поэтому диапазон и контраст полностью под контролем."/>
+                        <ComboBox x:Name="PaletteCombo" Margin="0,2,0,6" SelectionChanged="PaletteCombo_SelectionChanged"
+                                  ToolTip="Цветовая схема, которой раскрашиваются температуры. Считается у нас из сырых 16-битных данных, а не берётся из камеры — поэтому диапазон и контраст полностью под контролем."/>
+
+                        <TextBlock x:Name="RotationLabel" Text="Поворот: 0°"
+                                   ToolTip="Текущий угол поворота картинки. Запоминается в конфиге."/>
+                        <Grid Margin="0,2,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" x:Name="RotCcwBtn" Content="↺ 90° влево" Margin="0,3,3,3"
+                                    Click="RotateCcw_Click"
+                                    ToolTip="Повернуть картинку на 90° против часовой стрелки. Нажатия накапливаются: 0° → 270° → 180° → 90°. Температуры, маркеры и клики мышью пересчитываются под поворот. Во время записи видео поворот заблокирован."/>
+                            <Button Grid.Column="1" x:Name="RotCwBtn" Content="↻ 90° вправо" Margin="0,3,3,3"
+                                    Click="RotateCw_Click"
+                                    ToolTip="Повернуть картинку на 90° по часовой стрелке. Нажатия накапливаются: 0° → 90° → 180° → 270°. Во время записи видео поворот заблокирован."/>
+                            <Button Grid.Column="2" x:Name="RotResetBtn" Content="0°" Margin="0,3"
+                                    Click="RotateReset_Click" ToolTip="Вернуть поворот к 0°."/>
+                        </Grid>
+
+                        <CheckBox x:Name="UseCameraImageCheck" Content="Показывать псевдоцвет самой камеры"
+                                  Checked="UseCameraImage_Changed" Unchecked="UseCameraImage_Changed"
+                                  ToolTip="Показывать картинку, раскрашенную самой камерой (верхняя половина UVC-кадра), вместо нашей раскраски. Палитра, диапазон и гамма при этом не действуют, а температуры считаются как обычно."/>
+                        <CheckBox x:Name="SmoothScalingCheck" Content="Сглаженное масштабирование" IsChecked="True"
+                                  Checked="SmoothScaling_Changed" Unchecked="SmoothScaling_Changed"
+                                  ToolTip="Сглаживать картинку при растягивании на весь экран. Снимите галочку, чтобы видеть настоящие пиксели сенсора 256×192 без интерполяции."/>
+                        <CheckBox x:Name="MirrorCheck" Content="Зеркально по горизонтали"
+                                  Checked="Mirror_Changed" Unchecked="Mirror_Changed"
+                                  ToolTip="Отразить картинку слева направо. Удобно, когда камера направлена на вас, чтобы движения на экране совпадали с реальными."/>
+
+                        <TextBlock Text="Диапазон" Margin="0,8,0,2"
+                                   ToolTip="Какие температуры соответствуют краям палитры. От этого зависит только вид картинки — измеренные значения не меняются."/>
+                        <RadioButton x:Name="RangeRobustRadio" Content="Авто (с отсечением выбросов)" IsChecked="True"
+                                     Checked="RangeMode_Changed"
+                                     ToolTip="Границы палитры считаются по кадру с отбросом 2% самых холодных и 2% самых горячих пикселей. Одна яркая точка (лампа, паяльник) не «выжигает» всю картинку. Обычный рабочий режим."/>
+                        <RadioButton x:Name="RangeAutoRadio" Content="Авто (min/max кадра)" Checked="RangeMode_Changed"
+                                     ToolTip="Границы палитры — ровно min и max текущего кадра. Максимум деталей, но картинка резко перестраивается при появлении горячих объектов."/>
+                        <RadioButton x:Name="RangeManualRadio" Content="Вручную" Checked="RangeMode_Changed"
+                                     ToolTip="Границы палитры заданы вручную в полях ниже. Нужно, когда надо сравнивать кадры между собой или следить за узким диапазоном температур."/>
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="мин °C" Margin="0,0,4,0" ToolTip="{StaticResource TtMinC}"/>
+                            <TextBox x:Name="MinBox" Grid.Column="1" Text="20" TextChanged="ManualRange_Changed"
+                                     ToolTip="{StaticResource TtMinC}"/>
+                            <TextBlock Text="макс °C" Grid.Column="2" Margin="8,0,4,0" ToolTip="{StaticResource TtMaxC}"/>
+                            <TextBox x:Name="MaxBox" Grid.Column="3" Text="40" TextChanged="ManualRange_Changed"
+                                     ToolTip="{StaticResource TtMaxC}"/>
+                        </Grid>
+
+                        <TextBlock x:Name="GammaLabel" Text="Гамма: 1,00" Margin="0,8,0,0"
+                                   ToolTip="Как цвета распределены внутри диапазона. Меньше 1 — вытягивает детали в холодной части, больше 1 — в горячей, 1,00 — линейно."/>
+                        <Slider x:Name="GammaSlider" Minimum="0.4" Maximum="2.5" Value="1" TickFrequency="0.1"
+                                ValueChanged="Gamma_Changed"
+                                ToolTip="Как цвета распределены внутри диапазона. Меньше 1 — вытягивает детали в холодной части, больше 1 — в горячей, 1,00 — линейно."/>
+                        <TextBlock x:Name="SmoothLabel" Text="Инерция диапазона: 0,60"
+                                   ToolTip="Насколько плавно границы авто-диапазона следуют за кадром. 0 — мгновенно, но картинка заметно мерцает; ближе к 1 — очень инертно. Влияет только на авто-режимы."/>
+                        <Slider x:Name="SmoothSlider" Minimum="0" Maximum="0.95" Value="0.6"
+                                ValueChanged="Smooth_Changed"
+                                ToolTip="Насколько плавно границы авто-диапазона следуют за кадром. 0 — мгновенно, но картинка заметно мерцает; ближе к 1 — очень инертно. Влияет только на авто-режимы."/>
+                    </StackPanel>
+                </Expander>
+
+                <Expander x:Name="SecMeasure" Style="{StaticResource Section}" Header="Измерения"
+                          ToolTip="Что показывать поверх картинки и как усреднять измерения.">
+                    <StackPanel>
+                        <CheckBox x:Name="ShowMinMaxCheck" Content="Маркеры min / max" IsChecked="True"
+                                  Checked="Marker_Changed" Unchecked="Marker_Changed"
+                                  ToolTip="Отмечать самую холодную (синий крест) и самую горячую (красный крест) точку кадра."/>
+                        <CheckBox x:Name="ShowCenterCheck" Content="Центральная точка" IsChecked="True"
+                                  Checked="Marker_Changed" Unchecked="Marker_Changed"
+                                  ToolTip="Показывать температуру в центре кадра — аналог прицела в обычных тепловизорах."/>
+                        <CheckBox x:Name="ShowSpotsCheck" Content="Закреплённые точки (клик по кадру)" IsChecked="True"
+                                  Checked="Marker_Changed" Unchecked="Marker_Changed"
+                                  ToolTip="Показывать закреплённые точки (зелёные кресты). Добавить — клик по кадру, убрать — клик рядом с существующей. До 12 точек, сохраняются в конфиге."/>
+                        <Button Content="Убрать все точки" Click="ClearSpots_Click"
+                                ToolTip="Удалить все закреплённые точки."/>
+                        <TextBlock x:Name="SpotSizeLabel" Text="Усреднение точки: 3x3" Margin="0,6,0,0"
+                                   ToolTip="Сколько пикселей усреднять вокруг точки при измерении. 1×1 — самый шумный результат, 5×5 и больше — стабильнее, но мелкие детали смазываются. На маркеры min/max не влияет."/>
+                        <Slider x:Name="SpotSizeSlider" Minimum="1" Maximum="9" Value="3" TickFrequency="2"
+                                IsSnapToTickEnabled="True" ValueChanged="SpotSize_Changed"
+                                ToolTip="Сколько пикселей усреднять вокруг точки при измерении. 1×1 — самый шумный результат, 5×5 и больше — стабильнее, но мелкие детали смазываются. На маркеры min/max не влияет."/>
+                        <TextBlock x:Name="StatsText" Text="—" Margin="0,6,0,0" TextWrapping="Wrap" FontFamily="Consolas"
+                                   ToolTip="Сводка по текущему кадру: min, max, среднее и центр в °C, координаты крайних точек и сырой 16-битный диапазон. Температура считается как T = raw / 64 − 273,15."/>
+                    </StackPanel>
+                </Expander>
+
+                <Expander x:Name="SecCapture" Style="{StaticResource Section}" Header="Съёмка"
+                          ToolTip="Снимки и запись видео вместе с сырой радиометрией.">
+                    <StackPanel>
+                        <Button Content="Снимок (PNG + .r16 + CSV)" Click="Snapshot_Click"
+                                ToolTip="Сохранить четыре файла сразу: PNG как на экране (с метками), PNG без меток, .r16 с сырыми 16-битными данными и CSV с температурами в °C."/>
+                        <Button x:Name="RecordBtn" Content="Начать запись" Click="Record_Click"
+                                ToolTip="Писать mp4 с раскрашенной картинкой и одновременно .r16 со всеми сырыми кадрами. По .r16 потом можно пересчитать температуры и сменить палитру. Пока идёт запись, поворот менять нельзя."/>
+                        <TextBlock x:Name="RecordText" Text="—" FontSize="11" Margin="0,2,0,4"
+                                   ToolTip="Длительность текущей записи и число записанных кадров."/>
+                        <Button Content="Открыть папку" Click="OpenFolder_Click"
+                                ToolTip="Открыть в проводнике папку, куда сохраняются снимки и записи."/>
+                        <TextBlock x:Name="FolderText" FontSize="10" TextWrapping="Wrap" Foreground="#FF9A9AA6"
+                                   ToolTip="Папка для снимков и записей."/>
+                    </StackPanel>
+                </Expander>
+
+                <Expander x:Name="SecCamera" Style="{StaticResource Section}" Header="Камера (vendor-команды, libusb)"
+                          ToolTip="Настройки внутри самой камеры. Идут не через UVC, а через vendor control transfers по libusb, поэтому требуют отдельной подготовки — см. подсказку к кнопке подключения.">
+                    <StackPanel>
+                        <Button x:Name="UsbConnectBtn" Content="Подключить управление" Click="UsbConnect_Click"
+                                ToolTip="Подключиться к камере по libusb, чтобы менять её собственные настройки. Нужны две вещи: libusb-1.0.dll рядом с exe (скрипт tools\get-libusb.ps1) и libusb-фильтр, установленный через Zadig на «USB Camera (Interface 0)». Видеопоток лучше запустить заранее, иначе вызов libusb может зависнуть."/>
+                        <TextBlock x:Name="UsbStatusText" Text="Не подключено" TextWrapping="Wrap" FontSize="11"
+                                   Margin="0,2,0,6"
+                                   ToolTip="Состояние подключения по libusb и текст последней ошибки."/>
+                        <StackPanel x:Name="UsbPanel" IsEnabled="False">
+                            <TextBlock Text="Палитра камеры"
+                                       ToolTip="Палитра внутри самой камеры. Видна только в режиме «Показывать псевдоцвет самой камеры». На измеренные температуры не влияет."/>
+                            <ComboBox x:Name="CamPaletteCombo" Margin="0,2,0,6"
+                                      SelectionChanged="CamPalette_SelectionChanged"
+                                      ToolTip="Палитра внутри самой камеры. Видна только в режиме «Показывать псевдоцвет самой камеры». На измеренные температуры не влияет."/>
+                            <CheckBox x:Name="HighGainCheck" Content="High gain (узкий точный диапазон)"
+                                      IsChecked="True" Click="HighGain_Click"
+                                      ToolTip="High gain — узкий диапазон измерения с лучшей точностью (примерно до +150 °C). Снимите галочку для low gain: диапазон шире (до нескольких сотен градусов), но точность и чувствительность ниже."/>
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Излучение ε" Margin="0,2,6,2" ToolTip="{StaticResource TtEms}"/>
+                                <TextBox x:Name="EmsBox" Grid.Column="1" Text="0.95" Margin="0,2"
+                                         TextChanged="Tpd_Changed" ToolTip="{StaticResource TtEms}"/>
+                                <TextBlock Grid.Row="1" Text="Дистанция, м" Margin="0,2,6,2" ToolTip="{StaticResource TtDist}"/>
+                                <TextBox x:Name="DistBox" Grid.Row="1" Grid.Column="1" Text="0.5" Margin="0,2"
+                                         TextChanged="Tpd_Changed" ToolTip="{StaticResource TtDist}"/>
+                                <TextBlock Grid.Row="2" Text="T отраж., °C" Margin="0,2,6,2" ToolTip="{StaticResource TtRefl}"/>
+                                <TextBox x:Name="ReflBox" Grid.Row="2" Grid.Column="1" Text="25" Margin="0,2"
+                                         TextChanged="Tpd_Changed" ToolTip="{StaticResource TtRefl}"/>
+                                <TextBlock Grid.Row="3" Text="T возд., °C" Margin="0,2,6,2" ToolTip="{StaticResource TtAtm}"/>
+                                <TextBox x:Name="AtmBox" Grid.Row="3" Grid.Column="1" Text="25" Margin="0,2"
+                                         TextChanged="Tpd_Changed" ToolTip="{StaticResource TtAtm}"/>
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Content="Применить" Margin="0,6,3,3" Click="ApplyTpd_Click"
+                                        ToolTip="Записать в камеру ε, дистанцию и температуры отражения и воздуха. Значения хранятся в самой камере и влияют на её расчёт температуры."/>
+                                <Button Grid.Column="1" Content="Считать" Margin="3,6,0,3" Click="ReadTpd_Click"
+                                        ToolTip="Прочитать текущие значения из камеры и подставить их в поля."/>
+                            </Grid>
+                            <Button Content="Инфо об устройстве" Click="DeviceInfo_Click"
+                                    ToolTip="Запросить у камеры серийный номер, part number, версию и дату сборки прошивки, идентификатор сенсора."/>
+
+                            <Expander Header="Ручная команда" Foreground="{StaticResource PanelFg}" Margin="0,8,0,0"
+                                      ToolTip="Отправка произвольных vendor-команд — для исследования недокументированных функций, например принудительного срабатывания шторки (NUC). Коды команд см. в README.">
+                                <StackPanel>
+                                    <TextBlock Text="cmd (hex), param (hex), длина" FontSize="11"
+                                               ToolTip="{StaticResource TtRawCmd}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="RawCmdBox" Text="8409" Margin="0,2,3,2"
+                                                 ToolTip="{StaticResource TtRawCmd}"/>
+                                        <TextBox x:Name="RawParamBox" Grid.Column="1" Text="0" Margin="0,2,3,2"
+                                                 ToolTip="Параметр команды в hex. Для большинства команд 0; для «сведений об устройстве» — номер запрашиваемого поля."/>
+                                        <TextBox x:Name="RawLenBox" Grid.Column="2" Text="1" Margin="0,2"
+                                                 ToolTip="Сколько байт прочитать из камеры (для кнопки Read)."/>
+                                    </Grid>
+                                    <TextBox x:Name="RawPayloadBox" Text="" Margin="0,2"
+                                             ToolTip="Данные для записи в hex, например 03. Оставьте пустым — тогда команда только читает."/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Button Content="Read" Margin="0,3,3,3" Click="RawRead_Click"
+                                                ToolTip="Прочитать ответ на указанную команду."/>
+                                        <Button Grid.Column="1" Content="Write" Margin="3,3,0,3" Click="RawWrite_Click"
+                                                ToolTip="Отправить команду с указанным payload. Осторожно: неизвестные команды могут перевести камеру в неожидаемое состояние — тогда достаточно переподключить её."/>
+                                    </Grid>
+                                    <TextBlock x:Name="RawResultText" Text="—" FontFamily="Consolas" FontSize="11"
+                                               TextWrapping="Wrap"
+                                               ToolTip="Ответ камеры в hex или текст ошибки."/>
+                                </StackPanel>
+                            </Expander>
+                        </StackPanel>
+                    </StackPanel>
+                </Expander>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

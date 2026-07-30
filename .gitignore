@@ -1,0 +1,22 @@
+# сборка
+bin/
+obj/
+*.log
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+
+# нативная зависимость, скачивается скриптом tools/get-libusb.ps1
+libusb-1.0.dll
+*.7z
+
+# локальные настройки приложения (лежат рядом с exe)
+settings.json
+
+# результаты съёмки, если их случайно положили в репозиторий
+*.r16
+*.mp4
